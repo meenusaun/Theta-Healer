@@ -146,9 +146,15 @@
     .reveal-card { border-radius: 16px; padding: 16px 18px; margin: 4px 0; align-self: stretch; }
     .reveal-card.core { background: var(--coral-light); border: 1.5px solid #e8a88a; }
     .reveal-card.affirmation { background: var(--teal-light); border: 1.5px solid #9fd4c8; }
+    .reveal-card.command { background: var(--purple-light); border: 1.5px solid #c5b8e0; }
+    .reveal-card.new-belief { background: var(--accent-light); border: 1.5px solid #e8c8a0; }
     .reveal-card .rc-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 8px; }
     .reveal-card.core .rc-label { color: var(--coral); }
     .reveal-card.affirmation .rc-label { color: var(--teal); }
+    .reveal-card.command .rc-label { color: var(--purple); }
+    .reveal-card.new-belief .rc-label { color: var(--accent); }
+    .reveal-card .rc-command { font-size: 14px; color: #3a2060; line-height: 1.7; font-style: italic; }
+    .reveal-card .rc-new-belief { font-family: 'Lora', serif; font-size: 15px; color: #5a3010; line-height: 1.6; font-weight: 500; }
     .reveal-card .rc-belief { font-family: 'Lora', serif; font-size: 16px; color: #5a2010; line-height: 1.5; margin-bottom: 8px; font-style: italic; }
     .reveal-card .rc-reframe { font-size: 13px; color: #7a3020; line-height: 1.6; }
     .reveal-card .rc-affirmation { font-family: 'Lora', serif; font-size: 15px; color: #1a5248; line-height: 1.6; font-style: italic; }
@@ -300,7 +306,12 @@ PHASES:
 2. DIGGING: Use keyword questions to go deeper layer by layer (3-8 exchanges)
 3. KEY_BELIEF: Clearly name the core/key belief when found
 4. REFRAME: Explore what positive purpose this belief has served
-5. HEALING: Offer the new belief/healing statement and affirmation download
+5. HEALING: Offer the full healing — affirmation download + Theta command
+
+In the HEALING phase you must provide ALL of:
+- affirmation: a positive present-tense feeling download starting with "I know what it feels like to..."
+- theta_command: the exact spoken command the practitioner says to the Creator to witness the belief change. Format: "Creator of All That Is, it is commanded/requested that [old belief] be pulled, cancelled, resolved and replaced with [new belief] on all four levels — core, genetic, history and soul. Show me. It is done, it is done, it is done. Thank you."
+- new_belief: the positive replacement belief statement (short, present tense, first person)
 
 RESPONSE FORMAT — ONLY valid JSON, no markdown:
 {
@@ -313,7 +324,9 @@ RESPONSE FORMAT — ONLY valid JSON, no markdown:
   "key_belief_found": false,
   "core_belief": null,
   "reframe": null,
-  "affirmation": null
+  "affirmation": null,
+  "theta_command": null,
+  "new_belief": null
 }`;
 
 const phaseLabels = { SURFACE:'Building connection', DIGGING:'Digging deeper', KEY_BELIEF:'Core belief found', REFRAME:'Finding the gift', HEALING:'Healing & transformation' };
@@ -633,10 +646,28 @@ function addChip(text,type){
 
 function saveChat(){const sess=get(activeId);if(sess){sess.chatHTML=document.getElementById('chat').innerHTML;saveLocal();}}
 
-function showReveal(coreBelief,reframe,affirmation){
+function showReveal(coreBelief,reframe,affirmation,thetaCommand,newBelief){
   const chat=document.getElementById('chat');
-  if(coreBelief&&reframe){const c=document.createElement('div');c.className='reveal-card core';c.innerHTML=`<div class="rc-label">✦ Core belief uncovered</div><div class="rc-belief">"${coreBelief}"</div><div class="rc-reframe">${reframe}</div>`;chat.appendChild(c);}
-  if(affirmation){const a=document.createElement('div');a.className='reveal-card affirmation';a.innerHTML=`<div class="rc-label">✦ Healing download</div><div class="rc-affirmation">${affirmation}</div>`;chat.appendChild(a);}
+  if(coreBelief&&reframe){
+    const c=document.createElement('div');c.className='reveal-card core';
+    c.innerHTML=`<div class="rc-label">✦ Core belief uncovered</div><div class="rc-belief">"${coreBelief}"</div><div class="rc-reframe">${reframe}</div>`;
+    chat.appendChild(c);
+  }
+  if(newBelief){
+    const nb=document.createElement('div');nb.className='reveal-card new-belief';
+    nb.innerHTML=`<div class="rc-label">✦ New belief</div><div class="rc-new-belief">"${newBelief}"</div>`;
+    chat.appendChild(nb);
+  }
+  if(thetaCommand){
+    const tc=document.createElement('div');tc.className='reveal-card command';
+    tc.innerHTML=`<div class="rc-label">✦ Theta command — speak aloud</div><div class="rc-command">${thetaCommand}</div>`;
+    chat.appendChild(tc);
+  }
+  if(affirmation){
+    const a=document.createElement('div');a.className='reveal-card affirmation';
+    a.innerHTML=`<div class="rc-label">✦ Feeling download</div><div class="rc-affirmation">${affirmation}</div>`;
+    chat.appendChild(a);
+  }
   const sess=get(activeId);
   if(sess){sess.completed=true;sess.coreBelief=coreBelief||null;sess.affirmation=affirmation||null;saveLocal();}
   sessionEnded=true;
@@ -650,7 +681,7 @@ function showReveal(coreBelief,reframe,affirmation){
    CLAUDE API
    ═══════════════════════════════════════ */
 async function callClaude(messages){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,system:SYSTEM_PROMPT,messages})});
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:SYSTEM_PROMPT,messages})});
   return r.json();
 }
 
@@ -691,7 +722,7 @@ async function sendMessage(){
     updateDepth(parsed.depth||1);updatePhase(parsed.phase,parsed.approach);
     addBubble(parsed.message,parsed.key_belief_found?'healing':'healer','Theta Healer');
     if(parsed.key_belief_found&&parsed.core_belief)addChip(parsed.core_belief,'key');
-    if(parsed.affirmation)setTimeout(()=>showReveal(parsed.core_belief,parsed.reframe,parsed.affirmation),500);
+    if(parsed.affirmation)setTimeout(()=>showReveal(parsed.core_belief,parsed.reframe,parsed.affirmation,parsed.theta_command,parsed.new_belief),500);
     else if(driveToken && sess.history.length % 4 === 0) syncSessionToDrive(activeId); // auto-sync every 4 turns
   }catch{removeTyping();addBubble('Something went wrong. Please try again.','system');}
   btn.disabled=false;input.focus();
