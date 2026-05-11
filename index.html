@@ -119,7 +119,7 @@
     .pip { width: 18px; height: 4px; border-radius: 2px; background: var(--border); transition: background 0.3s; }
     .pip.on { background: var(--coral); }
 
-    .belief-trail { padding: 0 16px; display: none; flex-direction: column; gap: 4px; margin: 8px 0 0; flex-shrink: 0; max-height: 120px; overflow-y: auto; }
+    .belief-trail { padding: 0 16px; flex-direction: column; gap: 4px; margin: 8px 0 0; flex-shrink: 0; max-height: 120px; overflow-y: auto; display: none; }
     .belief-trail.visible { display: flex; }
     .trail-label { font-size: 10px; color: var(--text3); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 2px; }
     .belief-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text2); align-self: flex-start; max-width: 100%; }
@@ -171,6 +171,13 @@
     .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .send-btn:active { opacity: 0.8; }
     .send-btn svg { width: 20px; height: 20px; fill: #fff; }
+    .voice-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border2); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+    .voice-btn:active { background: var(--surface2); }
+    .voice-btn.recording { background: var(--danger); border-color: var(--danger); animation: pulse-red 1s infinite; }
+    .voice-btn svg { width: 20px; height: 20px; fill: var(--text2); }
+    .voice-btn.recording svg { fill: #fff; }
+    @keyframes pulse-red { 0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,0.4)} 50%{box-shadow:0 0 0 8px rgba(192,57,43,0)} }
+    .voice-status { font-size: 12px; color: var(--danger); text-align: center; margin-bottom: 6px; min-height: 16px; }
     .completed-note { font-size: 13px; color: var(--text3); text-align: center; padding: 14px 16px calc(14px + var(--safe-bottom)); border-top: 1px solid var(--border); }
 
     .toast { position: fixed; bottom: calc(80px + var(--safe-bottom)); left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); font-size: 13px; padding: 8px 18px; border-radius: 20px; opacity: 0; transition: opacity 0.25s, transform 0.25s; z-index: 999; white-space: nowrap; pointer-events: none; }
@@ -224,8 +231,12 @@
   <div class="belief-trail" id="belief-trail"><div class="trail-label">Belief trail</div></div>
   <div class="chat-scroll" id="chat"></div>
   <div id="input-area" class="input-area">
+    <div id="voice-status" class="voice-status"></div>
     <div class="input-row">
       <textarea id="user-input" placeholder="Share what is troubling you…" rows="1"></textarea>
+      <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" aria-label="Voice input">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zm-1 3a1 1 0 0 1 2 0v8a1 1 0 0 1-2 0V4zM7 11a1 1 0 0 0-2 0 7 7 0 0 0 14 0 1 1 0 0 0-2 0 5 5 0 0 1-10 0zm5 7a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1z"/></svg>
+      </button>
       <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Send">
         <svg viewBox="0 0 24 24"><path d="M2 12L22 2L14 22L11 13L2 12Z"/></svg>
       </button>
@@ -753,11 +764,77 @@ document.getElementById('user-input').addEventListener('input',function(){this.s
 document.getElementById('user-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
 
 /* ═══════════════════════════════════════
+   VOICE INPUT
+   ═══════════════════════════════════════ */
+let recognition = null;
+let isRecording = false;
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    document.getElementById('voice-btn').style.display = 'none';
+    return;
+  }
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = 'en-IN';
+
+  recognition.onstart = () => {
+    isRecording = true;
+    document.getElementById('voice-btn').classList.add('recording');
+    document.getElementById('voice-status').textContent = '● Listening…';
+    document.getElementById('user-input').placeholder = 'Speak now…';
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+    document.getElementById('user-input').value = transcript;
+    document.getElementById('user-input').style.height = 'auto';
+    document.getElementById('user-input').style.height = Math.min(document.getElementById('user-input').scrollHeight, 120) + 'px';
+    if (e.results[e.results.length - 1].isFinal) {
+      stopVoice();
+      setTimeout(() => sendMessage(), 400);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    stopVoice();
+    if (e.error === 'not-allowed') {
+      document.getElementById('voice-status').textContent = 'Microphone access denied';
+      setTimeout(() => { document.getElementById('voice-status').textContent = ''; }, 3000);
+    }
+  };
+
+  recognition.onend = () => { stopVoice(); };
+}
+
+function toggleVoice() {
+  if (!recognition) return;
+  if (isRecording) { stopVoice(); } else { startVoice(); }
+}
+
+function startVoice() {
+  if (!recognition || isRecording) return;
+  document.getElementById('user-input').value = '';
+  try { recognition.start(); } catch(e) {}
+}
+
+function stopVoice() {
+  isRecording = false;
+  document.getElementById('voice-btn').classList.remove('recording');
+  document.getElementById('voice-status').textContent = '';
+  document.getElementById('user-input').placeholder = 'Share what is troubling you…';
+  try { recognition.stop(); } catch(e) {}
+}
+
+/* ═══════════════════════════════════════
    INIT
    ═══════════════════════════════════════ */
 loadLocal();
 checkOAuthCallback();
 if(driveToken){updateDriveStatusUI(true);initDriveFolder();}
+initVoice();
 renderHome();
 </script>
 </body>
